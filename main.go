@@ -62,6 +62,7 @@ func GetLocalTimeZone() *time.Location {
 func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	log.Printf("start:%d", 1)
 	now := time.Now().In(GetLocalTimeZone()).Unix()
+	now1 := now
 	if len(event.Records) < 1 {
 		return "", nil
 	}
@@ -120,10 +121,12 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		writer.Write(splitBody)
 		split.Body.Close()
 		log.Printf("下载分片%s文件结束", s.Key)
+		writer.Flush()
 	}
-	writer.Flush()
 	out.Close()
 	log.Printf("下载分片文件结束")
+	log.Printf("下载总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
+	now = time.Now().In(GetLocalTimeZone()).Unix()
 	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
 		Body:   fileData,
@@ -131,7 +134,8 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		Key:    aws.String(config.Key),
 	})
 	fileData.Close()
-	log.Printf("version:%s:---:总耗时:%d", Record.EventVersion, time.Now().In(GetLocalTimeZone()).Unix()-now)
+	log.Printf("上传总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
+	log.Printf("总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now1)
 	return "", nil
 }
 
