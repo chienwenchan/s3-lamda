@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -112,7 +113,11 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	}
 	defer os.RemoveAll(basePath)
 	tmp := strings.Split(config.Key, "/")
-	out, _ := os.OpenFile(basePath+"/"+tmp[len(tmp)-1], os.O_CREATE|os.O_APPEND, 0755)
+	out, err := os.Create(basePath + "/" + tmp[len(tmp)-1])
+	if err != nil {
+		return "", err
+	}
+	writer := bufio.NewWriter(out)
 	log.Printf("开始下载分片文件")
 	for _, s := range config.Split {
 		splitInput := &s3.GetObjectInput{
@@ -124,18 +129,23 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 			return "", err
 		}
 		splitBody, _ := ioutil.ReadAll(split.Body)
-		out.Write(splitBody)
+		writer.Write(splitBody)
 		split.Body.Close()
 		log.Printf("下载分片文件:%s:读取大小:%d:写入大小:%d", s.Key, s.Size, len(splitBody))
 	}
+	writer.Flush()
+	outBody, _ := ioutil.ReadAll(out)
+	log.Printf("写入总大小:%d", len(outBody))
 	out.Close()
 	log.Printf("下载分片文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	now = time.Now().In(GetLocalTimeZone()).Unix()
+	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
-		Body:   out,
+		Body:   fileData,
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
 	})
+	fileData.Close()
 	log.Printf("上传文件结束:耗时%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	return result.String(), err
 }
