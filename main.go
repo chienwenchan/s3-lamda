@@ -74,7 +74,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	Record := event.Records[0]
 	Bucket = Record.S3.Bucket.Name
 	jsonFile = Record.S3.Object.Key
-	if Bucket != "" && jsonFile != "" {
+	if Bucket == "" && jsonFile == "" {
 		return "", nil
 	}
 	log.Println("step 2:", time.Now().In(GetLocalTimeZone()).Unix())
