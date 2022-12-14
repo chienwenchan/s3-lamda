@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -75,7 +77,12 @@ func GetLocalTimeZone() *time.Location {
 	return time.FixedZone("CST", 8*3600) // UTC+8
 }
 
-func HandleLambdaEvent(event EvEnt) (string, error) {
+func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
+	eventJson, _ := json.MarshalIndent(event, "", "  ")
+	log.Printf("EVENT: %s", eventJson)
+	lc, _ := lambdacontext.FromContext(ctx)
+	log.Printf("REQUEST ID: %s", lc.AwsRequestID)
+	log.Printf("FUNCTION NAME: %s", lambdacontext.FunctionName)
 	now := time.Now().In(GetLocalTimeZone()).Unix()
 	if len(event.Records) < 1 {
 		return "", nil
