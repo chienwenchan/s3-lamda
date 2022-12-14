@@ -134,14 +134,18 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 		log.Printf("下载分片文件:%s:读取大小:%d:写入大小:%d", s.Key, s.Size, len(splitBody))
 	}
 	writer.Flush()
+	outBody, _ := ioutil.ReadAll(out)
+	log.Printf("写入总大小:%d", len(outBody))
+	out.Close()
 	log.Printf("下载分片文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	now = time.Now().In(GetLocalTimeZone()).Unix()
+	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
-		Body:   out,
+		Body:   fileData,
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
 	})
-	out.Close()
+	fileData.Close()
 	log.Printf("上传文件结束:耗时%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	return result.String(), err
 }
