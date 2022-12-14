@@ -60,7 +60,7 @@ func GetLocalTimeZone() *time.Location {
 }
 
 func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
-	log.Printf("start")
+	log.Printf("start:%d", 1)
 	now := time.Now().In(GetLocalTimeZone()).Unix()
 	if len(event.Records) < 1 {
 		return "", nil
