@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -113,11 +112,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	}
 	defer os.RemoveAll(basePath)
 	tmp := strings.Split(config.Key, "/")
-	out, err := os.Create(basePath + "/" + tmp[len(tmp)-1])
-	if err != nil {
-		return "", err
-	}
-	writer := bufio.NewWriter(out)
+	out, _ := os.OpenFile(basePath+"/"+tmp[len(tmp)-1], os.O_CREATE|os.O_APPEND, 0755)
 	log.Printf("开始下载分片文件")
 	for _, s := range config.Split {
 		splitInput := &s3.GetObjectInput{
@@ -129,13 +124,10 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 			return "", err
 		}
 		splitBody, _ := ioutil.ReadAll(split.Body)
-		writer.Write(splitBody)
+		out.Write(splitBody)
 		split.Body.Close()
 		log.Printf("下载分片文件:%s:读取大小:%d:写入大小:%d", s.Key, s.Size, len(splitBody))
 	}
-	writer.Flush()
-	outBody, _ := ioutil.ReadAll(out)
-	log.Printf("写入总大小:%d", len(outBody))
 	out.Close()
 	log.Printf("下载分片文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	now = time.Now().In(GetLocalTimeZone()).Unix()
