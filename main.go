@@ -119,6 +119,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		splitBody, _ := ioutil.ReadAll(split.Body)
 		writer.Write(splitBody)
 		split.Body.Close()
+		log.Printf("下载分片%s文件结束", s.Key)
 	}
 	writer.Flush()
 	out.Close()
