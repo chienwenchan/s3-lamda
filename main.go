@@ -133,7 +133,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 		splitBody, _ := ioutil.ReadAll(split.Body)
 		writer.Write(splitBody)
 		split.Body.Close()
-		log.Printf("下载分片文件:%s", s.Key)
+		log.Printf("下载分片文件:%s:读取大小:%d:写入大小:%d", s.Key, s.Size, len(splitBody))
 	}
 	writer.Flush()
 	file.Close()
