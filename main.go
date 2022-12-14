@@ -137,12 +137,12 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 						if err == nil {
 							suc = true
 							out.Close()
-							break
 						}
 					}
 					if i == 9 || suc {
 						if suc {
 							log.Printf("下载分片%s文件结束", sp.Key)
+							break
 						} else {
 							log.Printf("错误:%s", err.Error())
 						}
