@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	lambda2 "github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"io/ioutil"
 	"log"
@@ -75,6 +76,15 @@ type Config struct {
 
 func GetLocalTimeZone() *time.Location {
 	return time.FixedZone("CST", 8*3600) // UTC+8
+}
+
+func callLambda() (string, error) {
+	var client = lambda2.New(session.New())
+	input := &lambda2.GetAccountSettingsInput{}
+	req, resp := client.GetAccountSettingsRequest(input)
+	err := req.Send()
+	output, _ := json.Marshal(resp.AccountUsage)
+	return string(output), err
 }
 
 func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
@@ -153,7 +163,11 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	})
 	fileData.Close()
 	log.Printf("version:%s:---:总耗时:%d", Verion, time.Now().In(GetLocalTimeZone()).Unix()-now)
-	return result.String(), err
+	usage, err := callLambda()
+	if err != nil {
+		return "ERROR", err
+	}
+	return usage, nil
 }
 
 func main() {
