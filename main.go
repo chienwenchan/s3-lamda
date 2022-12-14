@@ -1,14 +1,20 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
-	runtime "github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/lambda"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"io/ioutil"
 	"log"
 	"os"
+	"strings"
+	"time"
 )
 
 type EvEnt struct {
@@ -56,42 +62,92 @@ type EvEnt struct {
 	} `json:"records"`
 }
 
-var client = lambda.New(session.New())
-
-func callLambda() (string, error) {
-	input := &lambda.GetAccountSettingsInput{}
-	req, resp := client.GetAccountSettingsRequest(input)
-	err := req.Send()
-	output, _ := json.Marshal(resp.AccountUsage)
-	return string(output), err
+type Config struct {
+	Key   string `json:"key"`
+	Split []struct {
+		Key  string `json:"key"`
+		Size int    `json:"size"`
+	} `json:"split"`
 }
 
-func handleRequest(ctx context.Context, event EvEnt) (string, error) {
-	// event
-	eventJson, _ := json.MarshalIndent(event, "", "  ")
-	log.Printf("EVENT: %s", eventJson)
-	// environment variables
-	log.Printf("REGION: %s", os.Getenv("AWS_REGION"))
-	log.Println("ALL ENV VARS:")
-	for _, element := range os.Environ() {
-		log.Println(element)
+func GetLocalTimeZone() *time.Location {
+	return time.FixedZone("CST", 8*3600) // UTC+8
+}
+
+func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
+	now := time.Now().In(GetLocalTimeZone()).Unix()
+	if len(event.Records) < 1 {
+		return "", nil
 	}
-	// request context
-	lc, _ := lambdacontext.FromContext(ctx)
-	log.Printf("REQUEST ID: %s", lc.AwsRequestID)
-	// global variable
-	log.Printf("FUNCTION NAME: %s", lambdacontext.FunctionName)
-	// context method
-	deadline, _ := ctx.Deadline()
-	log.Printf("DEADLINE: %s", deadline)
-	// AWS SDK call
-	usage, err := callLambda()
+	Bucket := ""
+	jsonFile := ""
+	Record := event.Records[0]
+	Bucket = Record.S3.Bucket.Name
+	jsonFile = Record.S3.Object.Key
+	if Bucket == "" && jsonFile == "" {
+		return "", nil
+	}
+	svc := s3.New(session.New())
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(Bucket),
+		Key:    aws.String(jsonFile),
+	}
+	result, err := svc.GetObject(input)
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
-	return usage, nil
+	log.Printf("下载配置文件开始")
+	ret, _ := ioutil.ReadAll(result.Body)
+	defer result.Body.Close()
+	config := Config{}
+	err = json.Unmarshal(ret, &config)
+	if err != nil {
+		return "", err
+	}
+	log.Printf("下载配置文件结束")
+	h := md5.New()
+	h.Write([]byte(config.Key))
+	basePath := "/tmp/" + hex.EncodeToString(h.Sum(nil))
+	err = os.MkdirAll(basePath, 0755)
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(basePath)
+	tmp := strings.Split(config.Key, "/")
+	out, err := os.Create(basePath + "/" + tmp[len(tmp)-1])
+	if err != nil {
+		return "", err
+	}
+	writer := bufio.NewWriter(out)
+	log.Printf("开始下载分片文件")
+	for _, s := range config.Split {
+		splitInput := &s3.GetObjectInput{
+			Bucket: aws.String(Bucket),
+			Key:    aws.String(s.Key),
+		}
+		split, err := svc.GetObject(splitInput)
+		if err != nil {
+			return "", err
+		}
+		splitBody, _ := ioutil.ReadAll(split.Body)
+		writer.Write(splitBody)
+		split.Body.Close()
+	}
+	writer.Flush()
+	out.Close()
+	log.Printf("下载分片文件结束")
+	now = time.Now().In(GetLocalTimeZone()).Unix()
+	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
+	svc.PutObject(&s3.PutObjectInput{
+		Body:   fileData,
+		Bucket: aws.String(Bucket),
+		Key:    aws.String(config.Key),
+	})
+	fileData.Close()
+	log.Printf("version:%s:---:总耗时:%d", Record.EventVersion, time.Now().In(GetLocalTimeZone()).Unix()-now)
+	return "", nil
 }
 
 func main() {
-	runtime.Start(handleRequest)
+	lambda.Start(HandleLambdaEvent)
 }
