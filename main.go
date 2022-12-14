@@ -111,7 +111,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		go func(sp Split) {
 			splitInput := &s3.GetObjectInput{
 				Bucket: aws.String(Bucket),
-				Key:    aws.String(s.Key),
+				Key:    aws.String(sp.Key),
 			}
 			out, _ := os.Create(basePath + "/" + sp.Key)
 			for {
@@ -119,6 +119,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 				if err == nil {
 					_, err = io.Copy(out, split.Body)
 					if err == nil {
+						out.Close()
 						break
 					}
 				}
