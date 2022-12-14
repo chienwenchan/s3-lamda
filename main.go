@@ -131,6 +131,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 			return "", err
 		}
 		split.Body.Close()
+		log.Printf("下载分片文件:%s:%d", s.Key, time.Now().In(GetLocalTimeZone()).Unix())
 	}
 	log.Printf("下载分片文件结束:%d", time.Now().In(GetLocalTimeZone()).Unix())
 	svc.PutObject(&s3.PutObjectInput{
