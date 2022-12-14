@@ -117,9 +117,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out.Close()
-	file, _ := os.OpenFile(basePath+"/"+tmp[len(tmp)-1], os.O_CREATE|os.O_RDWR|os.O_APPEND, 0755)
-	writer := bufio.NewWriter(file)
+	writer := bufio.NewWriter(out)
 	log.Printf("开始下载分片文件")
 	for _, s := range config.Split {
 		splitInput := &s3.GetObjectInput{
@@ -136,16 +134,14 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 		log.Printf("下载分片文件:%s:读取大小:%d:写入大小:%d", s.Key, s.Size, len(splitBody))
 	}
 	writer.Flush()
-	file.Close()
 	log.Printf("下载分片文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	now = time.Now().In(GetLocalTimeZone()).Unix()
-	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
-		Body:   fileData,
+		Body:   out,
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
 	})
-	fileData.Close()
+	out.Close()
 	log.Printf("上传文件结束:耗时%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	return result.String(), err
 }
