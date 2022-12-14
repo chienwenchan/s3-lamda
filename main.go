@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+const Verion = "1.0"
+
 type EvEnt struct {
 	Records []struct {
 		AwsRegion   string `json:"awsRegion"`
@@ -103,7 +105,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Printf("下载配置文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
+	log.Printf("下载配置文件结束")
 	h := md5.New()
 	h.Write([]byte(config.Key))
 	basePath := "/tmp/" + hex.EncodeToString(h.Sum(nil))
@@ -131,13 +133,10 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 		splitBody, _ := ioutil.ReadAll(split.Body)
 		writer.Write(splitBody)
 		split.Body.Close()
-		log.Printf("下载分片文件:%s:读取大小:%d:写入大小:%d", s.Key, s.Size, len(splitBody))
 	}
 	writer.Flush()
-	outBody, _ := ioutil.ReadAll(out)
-	log.Printf("写入总大小:%d", len(outBody))
 	out.Close()
-	log.Printf("下载分片文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
+	log.Printf("下载分片文件结束")
 	now = time.Now().In(GetLocalTimeZone()).Unix()
 	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
@@ -146,7 +145,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 		Key:    aws.String(config.Key),
 	})
 	fileData.Close()
-	log.Printf("上传文件结束:耗时%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
+	log.Printf("version:%s:---:总耗时:%d", Verion, time.Now().In(GetLocalTimeZone()).Unix()-now)
 	return result.String(), err
 }
 
