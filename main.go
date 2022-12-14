@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -74,6 +74,7 @@ func GetLocalTimeZone() *time.Location {
 }
 
 func HandleLambdaEvent(event EvEnt) (string, error) {
+	now := time.Now().In(GetLocalTimeZone()).Unix()
 	if len(event.Records) < 1 {
 		return "", nil
 	}
@@ -94,7 +95,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Printf("下载配置文件开始:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	log.Printf("下载配置文件开始")
 	ret, _ := ioutil.ReadAll(result.Body)
 	defer result.Body.Close()
 	config := Config{}
@@ -102,7 +103,7 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Printf("下载配置文件结束:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	log.Printf("下载配置文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	h := md5.New()
 	h.Write([]byte(config.Key))
 	basePath := "/tmp/" + hex.EncodeToString(h.Sum(nil))
@@ -116,31 +117,36 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Printf("开始下载分片文件:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	out.Close()
+	file, _ := os.OpenFile(basePath+"/"+tmp[len(tmp)-1], os.O_CREATE|os.O_RDWR|os.O_APPEND, 0755)
+	writer := bufio.NewWriter(file)
+	log.Printf("开始下载分片文件")
 	for _, s := range config.Split {
-		input = &s3.GetObjectInput{
+		splitInput := &s3.GetObjectInput{
 			Bucket: aws.String(Bucket),
 			Key:    aws.String(s.Key),
 		}
-		split, err := svc.GetObject(input)
+		split, err := svc.GetObject(splitInput)
 		if err != nil {
 			return "", err
 		}
-		_, err = io.Copy(out, split.Body)
-		if err != nil {
-			return "", err
-		}
+		splitBody, _ := ioutil.ReadAll(split.Body)
+		writer.Write(splitBody)
 		split.Body.Close()
-		log.Printf("下载分片文件:%s:%d", s.Key, time.Now().In(GetLocalTimeZone()).Unix())
+		log.Printf("下载分片文件:%s", s.Key)
 	}
-	log.Printf("下载分片文件结束:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	writer.Flush()
+	file.Close()
+	log.Printf("下载分片文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
+	now = time.Now().In(GetLocalTimeZone()).Unix()
+	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
-		Body:   out,
+		Body:   fileData,
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
 	})
-	log.Printf("上传文件结束:%d", time.Now().In(GetLocalTimeZone()).Unix())
-	out.Close()
+	fileData.Close()
+	log.Printf("上传文件结束:耗时%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	return result.String(), err
 }
 
