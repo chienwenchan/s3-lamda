@@ -75,12 +75,14 @@ func GetLocalTimeZone() *time.Location {
 }
 
 func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
+	log.Printf("start")
 	now := time.Now().In(GetLocalTimeZone()).Unix()
 	if len(event.Records) < 1 {
 		return "", nil
 	}
 	Bucket := ""
 	jsonFile := ""
+	log.Printf("获得event")
 	Record := event.Records[0]
 	Bucket = Record.S3.Bucket.Name
 	jsonFile = Record.S3.Object.Key
