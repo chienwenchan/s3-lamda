@@ -113,20 +113,53 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	}
 	defer os.RemoveAll(basePath)
 	wg := sync.WaitGroup{}
-	wg.Add(len(config.Split))
 	log.Printf("开始下载分片文件")
-	for _, s := range config.Split {
-		go func(sp Split, sw *sync.WaitGroup) {
-			log.Printf("下载分片%s文件开始", sp.Key)
+	for i, s := range config.Split {
+		if i == 0 || i%10 != 0 {
+			wg.Add(1)
+			go func(sp Split, sw *sync.WaitGroup) {
+				log.Printf("下载分片%s文件开始", sp.Key)
+				splitInput := &s3.GetObjectInput{
+					Bucket: aws.String(Bucket),
+					Key:    aws.String(sp.Key),
+				}
+				out, err := os.Create(basePath + "/" + sp.Key)
+				if err != nil {
+					log.Printf("错误1:%s", err.Error())
+					sw.Done()
+					return
+				}
+				suc := false
+				for i := 0; i < 10; i++ {
+					split, err := svc.GetObject(splitInput)
+					if err == nil {
+						_, err = io.Copy(out, split.Body)
+						if err == nil {
+							suc = true
+							out.Close()
+							break
+						}
+					}
+					if i == 9 || suc {
+						if suc {
+							log.Printf("下载分片%s文件结束", sp.Key)
+						} else {
+							log.Printf("错误:%s", err.Error())
+						}
+					}
+				}
+				sw.Done()
+			}(s, &wg)
+		} else {
+			log.Printf("下载分片%s文件开始", s.Key)
 			splitInput := &s3.GetObjectInput{
 				Bucket: aws.String(Bucket),
-				Key:    aws.String(sp.Key),
+				Key:    aws.String(s.Key),
 			}
-			out, err := os.Create(basePath + "/" + sp.Key)
+			out, err := os.Create(basePath + "/" + s.Key)
 			if err != nil {
 				log.Printf("错误1:%s", err.Error())
-				sw.Done()
-				return
+				return "", err
 			}
 			suc := false
 			for i := 0; i < 10; i++ {
@@ -139,16 +172,15 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 						break
 					}
 				}
-				if i == 9 {
+				if i == 9 || suc {
 					if suc {
-						log.Printf("下载分片%s文件结束", sp.Key)
+						log.Printf("下载分片%s文件结束", s.Key)
 					} else {
 						log.Printf("错误:%s", err.Error())
 					}
 				}
 			}
-			sw.Done()
-		}(s, &wg)
+		}
 	}
 	wg.Wait()
 	log.Printf("下载分片文件结束")
