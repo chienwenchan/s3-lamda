@@ -99,7 +99,15 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	h := md5.New()
 	h.Write([]byte(config.Key))
 	basePath := "/tmp/" + hex.EncodeToString(h.Sum(nil))
-	err = os.MkdirAll(basePath+"/"+config.Key, 0755)
+	ps := strings.Split(config.Split[0].Key, "/")
+	fpath := basePath
+	for i, p := range ps {
+		if i == len(ps)-1 {
+			break
+		}
+		fpath = fpath + "/" + p
+	}
+	err = os.MkdirAll(fpath, 0755)
 	if err != nil {
 		return "", err
 	}
