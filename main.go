@@ -124,7 +124,6 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	writer.Flush()
 	out.Close()
 	log.Printf("下载分片文件结束")
-	now = time.Now().In(GetLocalTimeZone()).Unix()
 	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
 		Body:   fileData,
