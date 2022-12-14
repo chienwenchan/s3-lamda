@@ -108,7 +108,8 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	wg.Add(len(config.Split))
 	log.Printf("开始下载分片文件")
 	for _, s := range config.Split {
-		go func(sp Split) {
+		go func(sp Split, sw *sync.WaitGroup) {
+			log.Printf("下载分片%s文件开始", sp.Key)
 			splitInput := &s3.GetObjectInput{
 				Bucket: aws.String(Bucket),
 				Key:    aws.String(sp.Key),
@@ -131,8 +132,8 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 			} else {
 				log.Printf("错误:%s", err.Error())
 			}
-			wg.Done()
-		}(s)
+			sw.Done()
+		}(s, &wg)
 	}
 	wg.Wait()
 	log.Printf("下载分片文件结束")
