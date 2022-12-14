@@ -10,10 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -48,11 +50,12 @@ type EvEnt struct {
 }
 
 type Config struct {
-	Key   string `json:"key"`
-	Split []struct {
-		Key  string `json:"key"`
-		Size int    `json:"size"`
-	} `json:"split"`
+	Key   string  `json:"key"`
+	Split []Split `json:"split"`
+}
+type Split struct {
+	Key  string `json:"key"`
+	Size int    `json:"size"`
 }
 
 func GetLocalTimeZone() *time.Location {
@@ -101,31 +104,52 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(basePath)
+	wg := sync.WaitGroup{}
+	wg.Add(len(config.Split))
+	log.Printf("开始下载分片文件")
+	for _, s := range config.Split {
+		go func(sp Split) {
+			splitInput := &s3.GetObjectInput{
+				Bucket: aws.String(Bucket),
+				Key:    aws.String(s.Key),
+			}
+			out, _ := os.Create(basePath + "/" + sp.Key)
+			for {
+				split, err := svc.GetObject(splitInput)
+				if err == nil {
+					_, err = io.Copy(out, split.Body)
+					if err == nil {
+						break
+					}
+				}
+			}
+			log.Printf("下载分片%s文件结束", sp.Key)
+			wg.Done()
+		}(s)
+	}
+	wg.Wait()
+	log.Printf("下载分片文件结束")
+	log.Printf("下载总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	tmp := strings.Split(config.Key, "/")
 	out, err := os.Create(basePath + "/" + tmp[len(tmp)-1])
 	if err != nil {
 		return "", err
 	}
 	writer := bufio.NewWriter(out)
-	log.Printf("开始下载分片文件")
 	for _, s := range config.Split {
-		splitInput := &s3.GetObjectInput{
-			Bucket: aws.String(Bucket),
-			Key:    aws.String(s.Key),
-		}
-		split, err := svc.GetObject(splitInput)
+		fo, err := os.Open(basePath + "/" + s.Key)
 		if err != nil {
 			return "", err
 		}
-		splitBody, _ := ioutil.ReadAll(split.Body)
-		writer.Write(splitBody)
-		split.Body.Close()
-		log.Printf("下载分片%s文件结束", s.Key)
+		f, err := ioutil.ReadAll(fo)
+		if err != nil {
+			return "", err
+		}
+		writer.Write(f)
+		fo.Close()
 		writer.Flush()
 	}
 	out.Close()
-	log.Printf("下载分片文件结束")
-	log.Printf("下载总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	now = time.Now().In(GetLocalTimeZone()).Unix()
 	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
