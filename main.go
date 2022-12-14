@@ -1,12 +1,18 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"io"
 	"io/ioutil"
 	"log"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -56,8 +62,11 @@ type EvEnt struct {
 }
 
 type Config struct {
-	Key   string   `json:"key"`
-	Split []string `json:"split"`
+	Key   string `json:"key"`
+	Split []struct {
+		Key  string `json:"key"`
+		Size int    `json:"size"`
+	} `json:"split"`
 }
 
 func GetLocalTimeZone() *time.Location {
@@ -65,11 +74,9 @@ func GetLocalTimeZone() *time.Location {
 }
 
 func HandleLambdaEvent(event EvEnt) (string, error) {
-	log.Println("start", time.Now().In(GetLocalTimeZone()).Unix())
 	if len(event.Records) < 1 {
 		return "", nil
 	}
-	log.Println("step 1:", time.Now().In(GetLocalTimeZone()).Unix())
 	Bucket := ""
 	jsonFile := ""
 	Record := event.Records[0]
@@ -78,21 +85,61 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	if Bucket == "" && jsonFile == "" {
 		return "", nil
 	}
-	log.Println("step 2:", time.Now().In(GetLocalTimeZone()).Unix())
 	svc := s3.New(session.New())
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(jsonFile),
 	}
-	log.Println("step 3:", time.Now().In(GetLocalTimeZone()).Unix())
 	result, err := svc.GetObject(input)
 	if err != nil {
 		return "", err
 	}
-	log.Println("step 4:", time.Now().In(GetLocalTimeZone()).Unix())
+	log.Printf("下载配置文件开始:%d", time.Now().In(GetLocalTimeZone()).Unix())
 	ret, _ := ioutil.ReadAll(result.Body)
-	log.Println(string(ret))
-	log.Println("step 5:", time.Now().In(GetLocalTimeZone()).Unix())
+	defer result.Body.Close()
+	config := Config{}
+	err = json.Unmarshal(ret, &config)
+	if err != nil {
+		return "", err
+	}
+	log.Printf("下载配置文件结束:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	h := md5.New()
+	h.Write([]byte(config.Key))
+	basePath := "/tmp/" + hex.EncodeToString(h.Sum(nil))
+	err = os.MkdirAll(basePath, 0755)
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(basePath)
+	tmp := strings.Split(config.Key, "/")
+	out, err := os.Create(basePath + "/" + tmp[len(tmp)-1])
+	if err != nil {
+		return "", err
+	}
+	log.Printf("开始下载分片文件:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	for _, s := range config.Split {
+		input = &s3.GetObjectInput{
+			Bucket: aws.String(Bucket),
+			Key:    aws.String(s.Key),
+		}
+		split, err := svc.GetObject(input)
+		if err != nil {
+			return "", err
+		}
+		_, err = io.Copy(out, split.Body)
+		if err != nil {
+			return "", err
+		}
+		split.Body.Close()
+	}
+	log.Printf("下载分片文件结束:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	svc.PutObject(&s3.PutObjectInput{
+		Body:   out,
+		Bucket: aws.String(Bucket),
+		Key:    aws.String(config.Key),
+	})
+	log.Printf("上传文件结束:%d", time.Now().In(GetLocalTimeZone()).Unix())
+	out.Close()
 	return result.String(), err
 }
 
