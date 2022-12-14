@@ -63,7 +63,7 @@ func GetLocalTimeZone() *time.Location {
 }
 
 func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
-	log.Printf("start:%d", 1)
+	log.Printf("start:%d", 1222)
 	now := time.Now().In(GetLocalTimeZone()).Unix()
 	now1 := now
 	if len(event.Records) < 1 {
@@ -114,17 +114,23 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 				Key:    aws.String(sp.Key),
 			}
 			out, _ := os.Create(basePath + "/" + sp.Key)
-			for {
+			suc := false
+			for i := 0; i < 10; i++ {
 				split, err := svc.GetObject(splitInput)
 				if err == nil {
 					_, err = io.Copy(out, split.Body)
 					if err == nil {
+						suc = true
 						out.Close()
 						break
 					}
 				}
 			}
-			log.Printf("下载分片%s文件结束", sp.Key)
+			if suc {
+				log.Printf("下载分片%s文件结束", sp.Key)
+			} else {
+				log.Printf("错误:%s", err.Error())
+			}
 			wg.Done()
 		}(s)
 	}
