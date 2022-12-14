@@ -131,13 +131,11 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 	out.Close()
 	log.Printf("下载分片文件结束耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	now = time.Now().In(GetLocalTimeZone()).Unix()
-	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
-		Body:   fileData,
+		Body:   out,
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
 	})
-	fileData.Close()
 	log.Printf("上传文件结束:耗时%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	return result.String(), err
 }
