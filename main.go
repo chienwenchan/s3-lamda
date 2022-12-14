@@ -5,6 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"io/ioutil"
 	"log"
 	"time"
 )
@@ -89,7 +90,8 @@ func HandleLambdaEvent(event EvEnt) (string, error) {
 		return "", err
 	}
 	log.Println("step 4:", time.Now().In(GetLocalTimeZone()).Unix())
-	log.Println(result.String())
+	ret, _ := ioutil.ReadAll(result.Body)
+	log.Println(string(ret))
 	log.Println("step 5:", time.Now().In(GetLocalTimeZone()).Unix())
 	return result.String(), err
 }
