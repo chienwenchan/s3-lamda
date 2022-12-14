@@ -19,25 +19,13 @@ import (
 
 type EvEnt struct {
 	Records []struct {
-		AwsRegion   string `json:"awsRegion"`
-		EventName   string `json:"eventName"`
-		EventSource string `json:"eventSource"`
-		EventTime   struct {
-			IMillis     int64 `json:"iMillis"`
-			IChronology struct {
-				IBase struct {
-					IMinDaysInFirstWeek int `json:"iMinDaysInFirstWeek"`
-				} `json:"iBase"`
-			} `json:"iChronology"`
-		} `json:"eventTime"`
+		AwsRegion         string `json:"awsRegion"`
+		EventName         string `json:"eventName"`
+		EventSource       string `json:"eventSource"`
 		EventVersion      string `json:"eventVersion"`
 		RequestParameters struct {
 			SourceIPAddress string `json:"sourceIPAddress"`
 		} `json:"requestParameters"`
-		ResponseElements struct {
-			XAmzID2       string `json:"xAmzId2"`
-			XAmzRequestID string `json:"xAmzRequestId"`
-		} `json:"responseElements"`
 		S3 struct {
 			ConfigurationID string `json:"configurationId"`
 			Bucket          struct {
@@ -56,9 +44,6 @@ type EvEnt struct {
 			} `json:"object"`
 			S3SchemaVersion string `json:"s3SchemaVersion"`
 		} `json:"s3"`
-		UserIdentity struct {
-			PrincipalID string `json:"principalId"`
-		} `json:"userIdentity"`
 	} `json:"records"`
 }
 
