@@ -204,15 +204,15 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		fo.Close()
 		writer.Flush()
 	}
-	defer out.Close()
-	//now = time.Now().In(GetLocalTimeZone()).Unix()
-	//fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
+	out.Close()
+	now = time.Now().In(GetLocalTimeZone()).Unix()
+	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
 		Body:   out,
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
 	})
-	//fileData.Close()
+	fileData.Close()
 	log.Printf("上传总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
 	log.Printf("总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now1)
 	return "", nil
