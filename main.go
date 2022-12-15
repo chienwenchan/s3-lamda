@@ -163,7 +163,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		return true
 	})
 	if len(datas) != len(config.Split) {
-		log.Printf("合并错误4:%s", "上传分片数不一致")
+		log.Printf("合并错误4:%s:%d:%d", "上传分片数不一致", len(datas), len(config.Split))
 		return "", nil
 	}
 	log.Printf("提交合并结束请求")
