@@ -103,7 +103,6 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		return "", err
 	}
 	syncMap := sync.Map{}
-	wg := sync.WaitGroup{}
 
 	maxSize := len(config.Split)
 	size := 10
@@ -114,6 +113,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		if max >= len(config.Split) {
 			max = len(config.Split)
 		}
+		wg := sync.WaitGroup{}
 		tmpS := config.Split[min:max:max]
 		for j, s := range tmpS {
 			go func(sp Split, sw *sync.WaitGroup, svc1 *s3.S3, start, index int) {
