@@ -170,7 +170,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					log.Printf("下载分片错误2:%s:%s", sp.Key, err.Error())
 					return
 				}
-				syncMap.Store(strconv.Itoa(start+index+1), upResult.ETag)
+				syncMap.Store(strconv.Itoa(start+index+1), *upResult.ETag)
 				split.Body.Close()
 				log.Printf("下载分片%s文件成功", sp.Key)
 				sw.Done()
