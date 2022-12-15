@@ -208,7 +208,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	now = time.Now().In(GetLocalTimeZone()).Unix()
 	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
-		Body:   out,
+		Body:   fileData,
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
 	})
