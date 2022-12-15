@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"io"
 	"io/ioutil"
 	"log"
 	"math"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -102,8 +107,25 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		log.Printf("发生错误%s:", err.Error())
 		return "", err
 	}
-	syncMap := sync.Map{}
 
+	h := md5.New()
+	h.Write([]byte(config.Key))
+	basePath := "/tmp/" + hex.EncodeToString(h.Sum(nil))
+	ps := strings.Split(config.Split[0].Key, "/")
+	fpath := basePath
+	for i, p := range ps {
+		if i == len(ps)-1 {
+			break
+		}
+		fpath = fpath + "/" + p
+	}
+	err = os.MkdirAll(fpath, 0755)
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(basePath)
+
+	syncMap := sync.Map{}
 	maxSize := len(config.Split)
 	size := 10
 	step := int(math.Ceil(float64(maxSize) / float64(size)))
@@ -128,8 +150,16 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					log.Printf("下载分片错误1:%s:%s", sp.Key, err.Error())
 					return
 				}
+				out, err := os.Create(basePath + "/" + sp.Key)
+				if err != nil {
+					log.Printf("错误1:%s", err.Error())
+					sw.Done()
+					return
+				}
+				_, _ = io.Copy(out, split.Body)
+				out.Close()
 				upInput := &s3.UploadPartInput{
-					Body:       aws.ReadSeekCloser(split.Body),
+					Body:       aws.ReadSeekCloser(strings.NewReader(basePath + "/" + sp.Key)),
 					Bucket:     aws.String(Bucket),
 					Key:        aws.String(config.Key),
 					PartNumber: aws.Int64(int64(start+index) + 1),
