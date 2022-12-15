@@ -180,19 +180,27 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	}
 
 	datas := make([]*s3.CompletedPart, 0)
+	dataMap := make(map[int64]*s3.CompletedPart)
 	syncMap.Range(func(key, value any) bool {
 		partNumber, _ := strconv.ParseInt(key.(string), 10, 64)
 		if partNumber < 1 {
 			log.Printf("合并错误3:%s:%s", key, value)
 			return false
 		}
-		data := &s3.CompletedPart{
+		/*data := &s3.CompletedPart{
 			ETag:       aws.String(value.(string)),
 			PartNumber: aws.Int64(partNumber),
 		}
-		datas = append(datas, data)
+		datas = append(datas, data)*/
+		dataMap[partNumber] = &s3.CompletedPart{
+			ETag:       aws.String(value.(string)),
+			PartNumber: aws.Int64(partNumber),
+		}
 		return true
 	})
+	for i := 1; i <= len(dataMap); i++ {
+		datas = append(datas, dataMap[int64(i)])
+	}
 	if len(datas) != len(config.Split) {
 		log.Printf("合并错误4:%s:%d:%d", "上传分片数不一致", len(datas), len(config.Split))
 		return "", nil
