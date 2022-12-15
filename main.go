@@ -1,20 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"io"
 	"io/ioutil"
 	"log"
-	"os"
-	"strings"
+	"math"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -63,7 +59,7 @@ func GetLocalTimeZone() *time.Location {
 }
 
 func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
-	log.Printf("start:%d", 1222)
+	log.Printf("start:%d", 3)
 	now := time.Now().In(GetLocalTimeZone()).Unix()
 	now1 := now
 	if len(event.Records) < 1 {
@@ -76,6 +72,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	Bucket = Record.S3.Bucket.Name
 	jsonFile = Record.S3.Object.Key
 	if Bucket == "" && jsonFile == "" {
+		log.Printf("获取数据失败")
 		return "", nil
 	}
 	svc := s3.New(session.New())
@@ -96,124 +93,95 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		return "", err
 	}
 	log.Printf("下载配置文件结束")
-	h := md5.New()
-	h.Write([]byte(config.Key))
-	basePath := "/tmp/" + hex.EncodeToString(h.Sum(nil))
-	ps := strings.Split(config.Split[0].Key, "/")
-	fpath := basePath
-	for i, p := range ps {
-		if i == len(ps)-1 {
-			break
-		}
-		fpath = fpath + "/" + p
+	createMultipartUploadInput := &s3.CreateMultipartUploadInput{
+		Bucket: aws.String(Bucket),
+		Key:    aws.String(config.Key),
 	}
-	err = os.MkdirAll(fpath, 0755)
+	cmuRes, err := svc.CreateMultipartUpload(createMultipartUploadInput)
 	if err != nil {
+		log.Printf("发生错误%s:", err.Error())
 		return "", err
 	}
-	defer os.RemoveAll(basePath)
+	syncMap := sync.Map{}
 	wg := sync.WaitGroup{}
-	log.Printf("开始下载分片文件")
-	for i, s := range config.Split {
-		if i == 0 || i%10 != 0 {
-			wg.Add(1)
-			go func(sp Split, sw *sync.WaitGroup) {
+
+	maxSize := len(config.Split)
+	size := 10
+	step := int(math.Ceil(float64(maxSize) / float64(size)))
+	for i := 0; i < step; i++ {
+		min := i * size
+		max := (i + 1) * size
+		if max >= len(config.Split) {
+			max = len(config.Split)
+		}
+		tmpS := config.Split[min:max:max]
+		for j, s := range tmpS {
+			go func(sp Split, sw *sync.WaitGroup, svc1 *s3.S3, start, index int) {
 				log.Printf("下载分片%s文件开始", sp.Key)
 				splitInput := &s3.GetObjectInput{
 					Bucket: aws.String(Bucket),
 					Key:    aws.String(sp.Key),
 				}
-				out, err := os.Create(basePath + "/" + sp.Key)
+				split, err := svc.GetObject(splitInput)
 				if err != nil {
-					log.Printf("错误1:%s", err.Error())
-					sw.Done()
+					log.Printf("下载分片错误1:%s:%s", sp.Key, err.Error())
 					return
 				}
-				suc := false
-				for i := 0; i < 10; i++ {
-					split, err := svc.GetObject(splitInput)
-					if err == nil {
-						_, err = io.Copy(out, split.Body)
-						if err == nil {
-							suc = true
-							out.Close()
-						}
-					}
-					if i == 9 || suc {
-						if suc {
-							log.Printf("下载分片%s文件结束", sp.Key)
-							break
-						} else {
-							log.Printf("错误:%s", err.Error())
-						}
-					}
+				upInput := &s3.UploadPartInput{
+					Body:       aws.ReadSeekCloser(split.Body),
+					Bucket:     aws.String(Bucket),
+					Key:        aws.String(config.Key),
+					PartNumber: aws.Int64(int64(start+index) + 1),
+					UploadId:   cmuRes.UploadId,
 				}
+				upResult, err := svc.UploadPart(upInput)
+				if err != nil {
+					log.Printf("下载分片错误2:%s:%s", sp.Key, err.Error())
+					return
+				}
+				syncMap.Store(strconv.Itoa(start+index+1), upResult.ETag)
+				split.Body.Close()
+				log.Printf("下载分片%s文件成功", sp.Key)
 				sw.Done()
-			}(s, &wg)
-		} else {
-			log.Printf("下载分片%s文件开始", s.Key)
-			splitInput := &s3.GetObjectInput{
-				Bucket: aws.String(Bucket),
-				Key:    aws.String(s.Key),
-			}
-			out, err := os.Create(basePath + "/" + s.Key)
-			if err != nil {
-				log.Printf("错误1:%s", err.Error())
-				return "", err
-			}
-			suc := false
-			for i := 0; i < 10; i++ {
-				split, err := svc.GetObject(splitInput)
-				if err == nil {
-					_, err = io.Copy(out, split.Body)
-					if err == nil {
-						suc = true
-						out.Close()
-						break
-					}
-				}
-				if i == 9 || suc {
-					if suc {
-						log.Printf("下载分片%s文件结束", s.Key)
-					} else {
-						log.Printf("错误:%s", err.Error())
-					}
-				}
-			}
+			}(s, &wg, svc, min, j)
 		}
+		wg.Wait()
 	}
-	wg.Wait()
-	log.Printf("下载分片文件结束")
-	log.Printf("下载总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
-	tmp := strings.Split(config.Key, "/")
-	out, err := os.Create(basePath + "/" + tmp[len(tmp)-1])
-	if err != nil {
-		return "", err
-	}
-	writer := bufio.NewWriter(out)
-	for _, s := range config.Split {
-		fo, err := os.Open(basePath + "/" + s.Key)
-		if err != nil {
-			return "", err
+
+	datas := make([]*s3.CompletedPart, 0)
+	syncMap.Range(func(key, value any) bool {
+		partNumber, _ := strconv.ParseInt(key.(string), 10, 64)
+		if partNumber < 1 {
+			log.Printf("合并错误3:%s:%s", key, value)
+			return false
 		}
-		f, err := ioutil.ReadAll(fo)
-		if err != nil {
-			return "", err
+		data := &s3.CompletedPart{
+			ETag:       aws.String(value.(string)),
+			PartNumber: aws.Int64(partNumber),
 		}
-		writer.Write(f)
-		fo.Close()
-		writer.Flush()
+		datas = append(datas, data)
+		return true
+	})
+	if len(datas) != len(config.Split) {
+		log.Printf("合并错误4:%s", "上传分片数不一致")
+		return "", nil
 	}
-	out.Close()
-	now = time.Now().In(GetLocalTimeZone()).Unix()
-	fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
-	svc.PutObject(&s3.PutObjectInput{
-		Body:   fileData,
+	log.Printf("提交合并结束请求")
+	cinput := &s3.CompleteMultipartUploadInput{
 		Bucket: aws.String(Bucket),
 		Key:    aws.String(config.Key),
-	})
-	fileData.Close()
-	log.Printf("上传总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now)
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: datas,
+		},
+		UploadId: cmuRes.UploadId,
+	}
+	res, err := svc.CompleteMultipartUpload(cinput)
+	if err != nil {
+		log.Printf("错误5:%s", err.Error())
+		return "", nil
+	}
+	log.Printf("提交合并结束请求")
+	log.Printf("success:%s", res.String())
 	log.Printf("总耗时:%d", time.Now().In(GetLocalTimeZone()).Unix()-now1)
 	return "", nil
 }
