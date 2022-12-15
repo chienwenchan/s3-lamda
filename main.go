@@ -116,6 +116,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 		wg := sync.WaitGroup{}
 		tmpS := config.Split[min:max:max]
 		for j, s := range tmpS {
+			wg.Add(1)
 			go func(sp Split, sw *sync.WaitGroup, svc1 *s3.S3, start, index int) {
 				log.Printf("下载分片%s文件开始", sp.Key)
 				splitInput := &s3.GetObjectInput{
