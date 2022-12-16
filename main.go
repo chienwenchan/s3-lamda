@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
@@ -149,17 +150,18 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					log.Printf("下载分片错误1:%s:%s", sp.Key, err.Error())
 					return
 				}
+				bodyBytes, err := ioutil.ReadAll(split.Body)
+				if err != nil {
+					log.Printf("读取分片错误:%s:%s", sp.Key, err.Error())
+					return
+				}
 				upInput := &s3.UploadPartInput{
-					Body:           aws.ReadSeekCloser(ioutil.NopCloser(split.Body)),
-					Bucket:         aws.String(Bucket),
-					ChecksumCRC32:  split.ChecksumCRC32,
-					ChecksumCRC32C: split.ChecksumCRC32C,
-					ChecksumSHA1:   split.ChecksumSHA1,
-					ChecksumSHA256: split.ChecksumSHA256,
-					ContentLength:  aws.Int64(int64(sp.Size)),
-					Key:            aws.String(config.Key),
-					PartNumber:     aws.Int64(int64(start+index) + 1),
-					UploadId:       cmuRes.UploadId,
+					Body:          bytes.NewReader(bodyBytes),
+					Bucket:        aws.String(Bucket),
+					ContentLength: aws.Int64(int64(sp.Size)),
+					Key:           aws.String(config.Key),
+					PartNumber:    aws.Int64(int64(start+index) + 1),
+					UploadId:      cmuRes.UploadId,
 				}
 				upResult, err := svc1.UploadPart(upInput)
 				if err != nil {
@@ -183,11 +185,6 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 			log.Printf("合并错误3:%s:%s", key, value)
 			return false
 		}
-		/*data := &s3.CompletedPart{
-			ETag:       aws.String(value.(string)),
-			PartNumber: aws.Int64(partNumber),
-		}
-		datas = append(datas, data)*/
 		dataMap[partNumber] = &s3.CompletedPart{
 			ETag:       aws.String(value.(string)),
 			PartNumber: aws.Int64(partNumber),
