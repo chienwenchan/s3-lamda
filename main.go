@@ -211,7 +211,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	var chunkSize int64 = 26214400 //25M
 	now = time.Now().In(GetLocalTimeZone()).Unix()
 	name, size := getFileInfo(basePath + "/" + tmp[len(tmp)-1])
-	PartsUpload(svc, Bucket, name, size, chunkSize)
+	PartsUpload(svc, Bucket, name, config.Key, size, chunkSize)
 	/*fileData, _ := os.Open(basePath + "/" + tmp[len(tmp)-1])
 	svc.PutObject(&s3.PutObjectInput{
 		Body:   fileData,
@@ -245,7 +245,7 @@ func getFileInfo(filename string) (string, int64) {
 	return filename, fileInfo.Size()
 }
 
-func PartsUpload(svc *s3.S3, bucket, key string, size, chunkSize int64) {
+func PartsUpload(svc *s3.S3, bucket, key, uploadKey string, size, chunkSize int64) {
 	oneDay := 86400
 
 	//文件操作
@@ -269,7 +269,7 @@ func PartsUpload(svc *s3.S3, bucket, key string, size, chunkSize int64) {
 	//创建分片
 	res, err := svc.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
 		Bucket:  &bucket,
-		Key:     &key,
+		Key:     &uploadKey,
 		Expires: &expires,
 		//
 		ContentType: aws.String(fileType),
@@ -298,7 +298,7 @@ func PartsUpload(svc *s3.S3, bucket, key string, size, chunkSize int64) {
 		//UploadPart=	req, out := c.UploadPartRequest(input)+req.Send()
 		uploadResult, err := svc.UploadPart(&s3.UploadPartInput{
 			Bucket:     &bucket,
-			Key:        &key,
+			Key:        &uploadKey,
 			PartNumber: aws.Int64(partNum),
 			UploadId:   res.UploadId,
 			//
@@ -316,7 +316,7 @@ func PartsUpload(svc *s3.S3, bucket, key string, size, chunkSize int64) {
 
 	compResp, err := svc.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
 		Bucket:   &bucket,
-		Key:      &key,
+		Key:      &uploadKey,
 		UploadId: res.UploadId,
 		//
 		MultipartUpload: &s3.CompletedMultipartUpload{
