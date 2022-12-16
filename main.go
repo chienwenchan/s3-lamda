@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"io"
 	"io/ioutil"
 	"log"
 	"math"
@@ -150,21 +149,13 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					log.Printf("下载分片错误1:%s:%s", sp.Key, err.Error())
 					return
 				}
-				out, err := os.Create(basePath + "/" + sp.Key)
-				if err != nil {
-					log.Printf("错误1:%s", err.Error())
-					sw.Done()
-					return
-				}
-				_, _ = io.Copy(out, split.Body)
-				out.Close()
 				upInput := &s3.UploadPartInput{
-					Body:          aws.ReadSeekCloser(strings.NewReader(basePath + "/" + sp.Key)),
+					Body:          aws.ReadSeekCloser(ioutil.NopCloser(split.Body)),
 					Bucket:        aws.String(Bucket),
 					Key:           aws.String(config.Key),
 					PartNumber:    aws.Int64(int64(start+index) + 1),
 					UploadId:      cmuRes.UploadId,
-					ContentLength: aws.Int64(int64(len(basePath + "/" + sp.Key))),
+					ContentLength: aws.Int64(int64(sp.Size)),
 				}
 				upResult, err := svc.UploadPart(upInput)
 				if err != nil {
