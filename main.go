@@ -150,7 +150,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					return
 				}
 				upInput := &s3.UploadPartInput{
-					Body:           aws.ReadSeekCloser(ioutil.NopCloser(split.Body)),
+					Body:           aws.ReadSeekCloser(split.Body),
 					Bucket:         aws.String(Bucket),
 					ChecksumCRC32:  split.ChecksumCRC32,
 					ChecksumCRC32C: split.ChecksumCRC32C,
