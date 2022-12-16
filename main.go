@@ -157,7 +157,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					UploadId:      cmuRes.UploadId,
 					ContentLength: aws.Int64(int64(sp.Size)),
 				}
-				upResult, err := svc.UploadPart(upInput)
+				upResult, err := svc1.UploadPart(upInput)
 				if err != nil {
 					log.Printf("下载分片错误2:%s:%s", sp.Key, err.Error())
 					return
