@@ -150,12 +150,16 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					return
 				}
 				upInput := &s3.UploadPartInput{
-					Body:          aws.ReadSeekCloser(ioutil.NopCloser(split.Body)),
-					Bucket:        aws.String(Bucket),
-					Key:           aws.String(config.Key),
-					PartNumber:    aws.Int64(int64(start+index) + 1),
-					UploadId:      cmuRes.UploadId,
-					ContentLength: aws.Int64(int64(sp.Size)),
+					Body:           aws.ReadSeekCloser(ioutil.NopCloser(split.Body)),
+					Bucket:         aws.String(Bucket),
+					ChecksumCRC32:  split.ChecksumCRC32,
+					ChecksumCRC32C: split.ChecksumCRC32C,
+					ChecksumSHA1:   split.ChecksumSHA1,
+					ChecksumSHA256: split.ChecksumSHA256,
+					ContentLength:  aws.Int64(int64(sp.Size)),
+					Key:            aws.String(config.Key),
+					PartNumber:     aws.Int64(int64(start+index) + 1),
+					UploadId:       cmuRes.UploadId,
 				}
 				upResult, err := svc1.UploadPart(upInput)
 				if err != nil {
