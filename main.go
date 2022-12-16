@@ -150,7 +150,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					return
 				}
 				upInput := &s3.UploadPartInput{
-					Body:           aws.ReadSeekCloser(split.Body),
+					Body:           aws.ReadSeekCloser(ioutil.NopCloser(split.Body)),
 					Bucket:         aws.String(Bucket),
 					ChecksumCRC32:  split.ChecksumCRC32,
 					ChecksumCRC32C: split.ChecksumCRC32C,
@@ -163,12 +163,12 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 				}
 				upResult, err := svc1.UploadPart(upInput)
 				if err != nil {
-					log.Printf("下载分片错误2:%s:%s", sp.Key, err.Error())
+					log.Printf("上传分片错误2:%s:%s", sp.Key, err.Error())
 					return
 				}
 				syncMap.Store(strconv.Itoa(start+index+1), *upResult.ETag)
 				split.Body.Close()
-				log.Printf("下载分片%s文件成功", sp.Key)
+				log.Printf("上传分片%s文件成功", sp.Key)
 				sw.Done()
 			}(s, &wg, svc, min, j)
 		}
