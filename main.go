@@ -164,7 +164,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					Key:           aws.String(config.Key),
 					PartNumber:    aws.Int64(int64(start+index) + 1),
 					UploadId:      cmuRes.UploadId,
-					ContentLength: aws.Int64(int64(sp.Size)),
+					ContentLength: aws.Int64(int64(len(basePath + "/" + sp.Key))),
 				}
 				upResult, err := svc.UploadPart(upInput)
 				if err != nil {
