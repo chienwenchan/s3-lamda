@@ -144,7 +144,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 					Bucket: aws.String(Bucket),
 					Key:    aws.String(sp.Key),
 				}
-				split, err := svc.GetObject(splitInput)
+				split, err := svc1.GetObject(splitInput)
 				if err != nil {
 					log.Printf("下载分片错误1:%s:%s", sp.Key, err.Error())
 					return
