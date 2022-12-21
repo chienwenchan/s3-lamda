@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -51,8 +50,9 @@ type EvEnt struct {
 }
 
 type Config struct {
-	Key   string  `json:"key"`
-	Split []Split `json:"split"`
+	Key    string  `json:"key"`
+	Bucket string  `json:"bucket"`
+	Split  []Split `json:"split"`
 }
 type Split struct {
 	Key  string `json:"key"`
@@ -63,43 +63,13 @@ func GetLocalTimeZone() *time.Location {
 	return time.FixedZone("CST", 8*3600) // UTC+8
 }
 
-func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
+func HandleLambdaEvent(ctx context.Context, config Config) (string, error) {
 	log.Printf("start:%d", 3)
 	now := time.Now().In(GetLocalTimeZone()).Unix()
 	now1 := now
-	if len(event.Records) < 1 {
-		return "", nil
-	}
-	Bucket := ""
-	jsonFile := ""
-	log.Printf("获得event")
-	Record := event.Records[0]
-	Bucket = Record.S3.Bucket.Name
-	jsonFile = Record.S3.Object.Key
-	if Bucket == "" && jsonFile == "" {
-		log.Printf("获取数据失败")
-		return "", nil
-	}
 	svc := s3.New(session.New())
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(Bucket),
-		Key:    aws.String(jsonFile),
-	}
-	result, err := svc.GetObject(input)
-	if err != nil {
-		return "", err
-	}
-	log.Printf("下载配置文件开始")
-	ret, _ := ioutil.ReadAll(result.Body)
-	defer result.Body.Close()
-	config := Config{}
-	err = json.Unmarshal(ret, &config)
-	if err != nil {
-		return "", err
-	}
-	log.Printf("下载配置文件结束")
 	createMultipartUploadInput := &s3.CreateMultipartUploadInput{
-		Bucket: aws.String(Bucket),
+		Bucket: aws.String(config.Bucket),
 		Key:    aws.String(config.Key),
 	}
 	cmuRes, err := svc.CreateMultipartUpload(createMultipartUploadInput)
@@ -142,7 +112,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 			go func(sp Split, sw *sync.WaitGroup, svc1 *s3.S3, start, index int) {
 				log.Printf("下载分片%s文件开始", sp.Key)
 				splitInput := &s3.GetObjectInput{
-					Bucket: aws.String(Bucket),
+					Bucket: aws.String(config.Bucket),
 					Key:    aws.String(sp.Key),
 				}
 				split, err := svc1.GetObject(splitInput)
@@ -157,7 +127,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 				}
 				upInput := &s3.UploadPartInput{
 					Body:          bytes.NewReader(bodyBytes),
-					Bucket:        aws.String(Bucket),
+					Bucket:        aws.String(config.Bucket),
 					ContentLength: aws.Int64(int64(sp.Size)),
 					Key:           aws.String(config.Key),
 					PartNumber:    aws.Int64(int64(start+index) + 1),
@@ -200,7 +170,7 @@ func HandleLambdaEvent(ctx context.Context, event EvEnt) (string, error) {
 	}
 	log.Printf("提交合并结束请求")
 	cinput := &s3.CompleteMultipartUploadInput{
-		Bucket: aws.String(Bucket),
+		Bucket: aws.String(config.Bucket),
 		Key:    aws.String(config.Key),
 		MultipartUpload: &s3.CompletedMultipartUpload{
 			Parts: datas,
